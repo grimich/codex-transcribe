@@ -55,19 +55,19 @@ sudo apt-get install -y ffmpeg
 With `pipx`:
 
 ```bash
-pipx install git+https://github.com/grimich/codex-transcribe.git
+pipx install git+https://github.com/grimich/codex-transcribe.git@v0.1.0
 ```
 
 With `uv`:
 
 ```bash
-uv tool install git+https://github.com/grimich/codex-transcribe.git
+uv tool install git+https://github.com/grimich/codex-transcribe.git@v0.1.0
 ```
 
 With pip:
 
 ```bash
-python -m pip install git+https://github.com/grimich/codex-transcribe.git
+python -m pip install git+https://github.com/grimich/codex-transcribe.git@v0.1.0
 ```
 
 ## Usage
