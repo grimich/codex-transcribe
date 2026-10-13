@@ -1,160 +1,84 @@
 # codex-transcribe
 
-A small Unix-style Python CLI that transcribes audio through the private ChatGPT backend used by Codex Desktop. It reuses your existing Codex login from `~/.codex/auth.json`.
-
-```bash
-codex-transcribe meeting.m4a > meeting.txt
-```
-
-The tool has one job: audio in, transcript out. There is no server, daemon, GUI, microphone recorder, clipboard integration, or public API service.
-
-## Features
-
-- Windows, macOS, and Linux
-- MP3, M4A, WAV, FLAC, OGG, and WebM
-- automatic splitting of large recordings
-- parallel transcription with retries
-- overlap-aware chunk merging
-- resumable work after interruption
-- clean stdout and diagnostic stderr
-- plain text or structured JSON
-- atomic output files
-- direct use of the Codex ChatGPT login; no developer API key
-- bundled cross-platform media tools; no system FFmpeg install
+One command: audio in, transcript out. The Python package decodes the input with its installed media dependencies and sends normalized audio to the transcription backend used by Codex.
 
 ## Requirements
 
-- Python 3.10 or newer
-- an active ChatGPT login in Codex
+- Python 3.10 or newer on Windows x86-64, macOS x86-64/arm64, or Linux x86-64
+- An existing Codex ChatGPT login
+- Network access to `chatgpt.com`
 
-Python package installation pulls in PyAV and a platform-specific FFmpeg binary automatically.
+The package installs PyAV and a platform-specific FFmpeg binary. System Git, FFmpeg, FFprobe, and a compiler are not required.
 
 ## Install
 
-With `pipx`:
+Install the versioned wheel into a Python environment:
 
 ```bash
-pipx install git+https://github.com/grimich/codex-transcribe.git@v0.2.0
+python -m pip install --only-binary=:all: "https://github.com/grimich/codex-transcribe/releases/download/v0.3.0/codex_transcribe-0.3.0-py3-none-any.whl"
+codex-transcribe --version
 ```
 
-With `uv`:
+`--only-binary=:all:` makes installation fail clearly if a required platform wheel is unavailable instead of compiling a dependency.
+
+## Use
 
 ```bash
-uv tool install git+https://github.com/grimich/codex-transcribe.git@v0.2.0
+codex-transcribe --output recording.txt recording.m4a
+codex-transcribe --output recording.json --format json recording.mp3
+codex-transcribe --output video.txt video.mp4
+cat recording.m4a | codex-transcribe --output recording.txt -
 ```
 
-With pip:
+The media format is detected from the bytes. The filename extension can be arbitrary. If a video has several audio streams, the first is used. Empty, encrypted, damaged, and undecodable input fails with an error. A recording without recognized speech can produce an empty transcript.
 
-```bash
-python -m pip install git+https://github.com/grimich/codex-transcribe.git@v0.2.0
+Without `--output`, the result is written to stdout. Diagnostics go to stderr. The output file is replaced atomically only after the entire recording succeeds. The command rejects an output path that points to the input file, including a symlink or hardlink.
+
+`--language CODE` optionally gives the backend a language hint. Without it, the backend detects the language. `--auth-file PATH` selects a Codex auth file.
+
+JSON output has this schema:
+
+```json
+{"schema_version":1,"status":"completed","text":"...","duration_seconds":42.5}
 ```
 
-## Usage
+Exit status `0` means the complete result was produced. Errors return a nonzero status and do not emit a partial transcript.
 
-Plain text to stdout:
+## Agent instruction
 
-```bash
-codex-transcribe recording.m4a > recording.txt
-```
-
-Atomic output file:
-
-```bash
-codex-transcribe -o recording.txt recording.m4a
-```
-
-Add chunk timestamps:
-
-```bash
-codex-transcribe --timestamps recording.m4a
-```
-
-Structured JSON:
-
-```bash
-codex-transcribe --format json recording.m4a > recording.json
-```
-
-Use in a pipeline:
-
-```bash
-codex-transcribe recording.m4a | your-next-tool
-```
-
-Read audio from stdin:
-
-```bash
-cat recording.m4a | codex-transcribe - > recording.txt
-```
-
-Russian is the default language hint. Override it when needed:
-
-```bash
-codex-transcribe --language en interview.mp3
-```
-
-## Agent installation
-
-Give an agent this repository URL and the following instruction:
+Give the agent the wheel URL above and this instruction:
 
 ```text
-Install codex-transcribe from this GitHub repository using pipx, uv tool, or
-python -m pip. The Python package installs all media dependencies. Then run:
-
-codex-transcribe -o <audio-name>.transcript.txt <audio-file>
+Install the versioned codex-transcribe wheel with Python pip and
+--only-binary=:all:. Confirm codex-transcribe --version succeeds.
+For AUDIO, run: codex-transcribe --output AUDIO.txt AUDIO
+Return the output path on success or the command's error on failure.
+Do not read or print auth.json.
 ```
 
-The agent does not need to read or copy access tokens. The CLI locates Codex authentication in this order:
+The same CLI can be called from a skill; the skill needs no audio or network implementation.
+
+## Authentication
+
+The auth file is selected in this order:
 
 1. `--auth-file`
 2. `CODEX_TRANSCRIBE_AUTH_FILE`
 3. `$CODEX_HOME/auth.json`
 4. `~/.codex/auth.json`
 
-## Output contract
+The tool reads this file without modifying or copying it. Audio is uploaded to `https://chatgpt.com/backend-api/transcribe`. This is a private endpoint; protocol changes require a package update.
 
-- stdout contains only the requested text or JSON
-- progress and errors go to stderr
-- no partial transcript is emitted unless `--allow-partial` is used
-- output written with `-o` is replaced atomically
-- exit status `0` means complete success
+## Source installation
 
-Important exit codes:
-
-| Code | Meaning |
-|---:|---|
-| 0 | complete success |
-| 2 | invalid CLI arguments |
-| 3 | invalid or changing input |
-| 4 | media inspection or conversion failure |
-| 5 | Codex authentication failure |
-| 6 | backend failure |
-| 7 | partial or incomplete transcript |
-| 8 | state, lock, or output failure |
-| 130 | interrupted by the user |
-
-## Privacy and stability
-
-Audio is uploaded to `https://chatgpt.com/backend-api/transcribe` using the OAuth token already stored by Codex. Tokens are never written to transcript files or state files.
-
-This endpoint is private and undocumented. It may change without notice. The backend-specific code is isolated in `backend.py` so it can be updated independently from splitting, resume, and output behavior.
-
-## Development
+A source archive can be installed without Git:
 
 ```bash
-git clone https://github.com/grimich/codex-transcribe.git
-cd codex-transcribe
-python -m venv .venv
+python -m pip install "https://github.com/grimich/codex-transcribe/archive/refs/tags/v0.3.0.zip"
 ```
 
-Activate the virtual environment and install the package:
-
-```bash
-python -m pip install -e .
-codex-transcribe --help
-```
+The versioned wheel above is the primary installation method.
 
 ## License
 
 MIT
-

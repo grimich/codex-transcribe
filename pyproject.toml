@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-transcribe"
-version = "0.2.0"
+version = "0.3.0"
 description = "Self-contained audio transcription CLI using your existing Codex ChatGPT login"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,7 +31,6 @@ dependencies = [
   "av>=17,<18",
   "httpx>=0.27,<1",
   "imageio-ffmpeg>=0.6,<1",
-  "platformdirs>=4,<5",
 ]
 
 [project.urls]
