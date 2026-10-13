@@ -40,8 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--keep-work", action="store_true")
     parser.add_argument("--allow-partial", action="store_true")
     parser.add_argument("--quiet", action="store_true")
-    parser.add_argument("--ffmpeg", type=Path)
-    parser.add_argument("--ffprobe", type=Path)
+    parser.add_argument("--ffmpeg", type=Path, help="override the bundled FFmpeg executable")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return parser
 
@@ -90,7 +89,6 @@ async def _run(args: argparse.Namespace) -> int:
         state_root=state_root,
         auth_file=args.auth_file,
         ffmpeg_path=args.ffmpeg,
-        ffprobe_path=args.ffprobe,
         progress=progress,
     )
     payload = render_json(result) if args.output_format == "json" else render_text(result, args.timestamps)

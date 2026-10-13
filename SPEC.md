@@ -2,7 +2,7 @@
 
 Статус: ready for implementation  
 Тип: одноцелевой Unix-подобный CLI  
-Runtime: Python 3.11+  
+Runtime: Python 3.10+
 Платформы: Windows, macOS, Linux
 
 ## 1. Решение
@@ -32,7 +32,7 @@ codex-transcribe [OPTIONS] INPUT
 - пользовательские подкоманды split, inspect, status или clean;
 - стабильный публичный Python SDK.
 
-FFprobe, FFmpeg, разбиение, повторы, resume и сборка являются внутренними стадиями одной команды.
+Пробинг через PyAV, bundled FFmpeg, разбиение, повторы, resume и сборка являются внутренними стадиями одной команды.
 
 ## 2. Инварианты
 
@@ -53,7 +53,7 @@ FFprobe, FFmpeg, разбиение, повторы, resume и сборка яв
 
 ### 3.1 Python
 
-- CPython `>=3.11`.
+- CPython `>=3.10`.
 - Установка через `pipx` или `uv tool`.
 - Собственный `.exe` не собирается.
 
@@ -62,7 +62,9 @@ FFprobe, FFmpeg, разбиение, повторы, resume и сборка яв
 Runtime:
 
 ```text
+av
 httpx
+imageio-ffmpeg
 platformdirs
 ```
 
@@ -78,20 +80,13 @@ respx
 
 ### 3.3 Media dependencies
 
-Требуются внешние:
+Внешние системные media-зависимости не требуются. `pip`, `pipx` или `uv` устанавливает:
 
-```text
-ffmpeg
-ffprobe
-```
+- PyAV с платформенными FFmpeg-библиотеками для пробинга;
+- `imageio-ffmpeg` с готовым платформенным FFmpeg executable для materialization.
 
-Порядок поиска:
-
-1. Явный `--ffmpeg` или `--ffprobe`.
-2. `CODEX_TRANSCRIBE_FFMPEG` или `CODEX_TRANSCRIBE_FFPROBE`.
-3. `PATH`.
-
-Инструмент не скачивает FFmpeg автоматически.
+Для диагностики можно переопределить bundled executable через `--ffmpeg PATH` или
+`CODEX_TRANSCRIBE_FFMPEG`. Обычная установка не читает `PATH` и не требует `ffprobe`.
 
 ## 4. CLI contract
 
@@ -139,8 +134,7 @@ cat meeting.m4a | codex-transcribe - > meeting.txt
 | `--keep-work` | off | Сохранить аудиочасти после успеха |
 | `--allow-partial` | off | Разрешить неполный результат |
 | `--quiet` | off | Отключить обычный stderr progress |
-| `--ffmpeg PATH` | auto | Путь к FFmpeg |
-| `--ffprobe PATH` | auto | Путь к FFprobe |
+| `--ffmpeg PATH` | bundled | Необязательное переопределение bundled FFmpeg |
 | `--version` | — | Версия инструмента |
 
 ### 4.3 Валидация CLI
@@ -216,7 +210,7 @@ stdin:
 
 - поток сохраняется в private temporary file;
 - SHA-256 считается во время записи;
-- FFprobe запускается только после полного сохранения;
+- PyAV probe запускается только после полного сохранения;
 - temporary file удаляется после завершения, если не нужен resume.
 
 ### 6.2 Fingerprint
@@ -242,7 +236,7 @@ Concurrency, timeout, retries, output path и output format не входят в
 
 ### 6.3 Probe
 
-FFprobe вызывается с JSON output. Извлекаются:
+Файл открывается через PyAV. Извлекаются:
 
 - container format;
 - audio codec;
@@ -304,7 +298,7 @@ ffmpeg -ss START -i INPUT -t DURATION -map 0:a:0 -c copy OUTPUT
 Требования:
 
 - каждый chunk получает отдельный файл;
-- фактическая duration измеряется FFprobe;
+- фактическая duration берётся из metadata контейнера или audio stream через PyAV;
 - logical interval не включает правое overlap соседней части;
 - при невозможности stream copy v1 завершает работу ошибкой `unsupported_media`;
 - автоматического перекодирования в v1 нет.
@@ -438,7 +432,7 @@ language=<language, если задан>
 - HTTP `401` после одного обновления credentials;
 - постоянный HTTP `403`;
 - некорректный JSON в двух последовательных ответах;
-- локальная ошибка FFmpeg.
+- локальная ошибка bundled FFmpeg.
 
 Специальное поведение:
 
@@ -513,7 +507,7 @@ Default root определяется `platformdirs.user_state_dir("codex-transc
 
 1. новые запросы не запускаются;
 2. активным HTTP requests даётся до 5 секунд на завершение;
-3. дочерние FFmpeg/FFprobe процессы завершаются;
+3. дочерний bundled FFmpeg process завершается;
 4. manifest атомарно сохраняется;
 5. process завершается с кодом `130` для SIGINT.
 
@@ -595,7 +589,7 @@ Default:
 | `0` | Полный успех |
 | `2` | Ошибка CLI arguments |
 | `3` | Ошибка input или input изменился |
-| `4` | FFmpeg/FFprobe или неподдерживаемое media |
+| `4` | Ошибка media probe/materialization или неподдерживаемое media |
 | `5` | Ошибка auth |
 | `6` | Постоянная backend/protocol ошибка |
 | `7` | Неполная расшифровка |
@@ -758,9 +752,9 @@ v1 готова, когда выполняются все условия:
 
 ### Milestone 2: длинное audio
 
-- FFprobe;
+- PyAV probe;
 - chunk planner;
-- FFmpeg materialization;
+- bundled FFmpeg materialization;
 - scheduler;
 - overlap merge.
 

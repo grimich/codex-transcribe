@@ -20,54 +20,33 @@ The tool has one job: audio in, transcript out. There is no server, daemon, GUI,
 - plain text or structured JSON
 - atomic output files
 - direct use of the Codex ChatGPT login; no developer API key
+- bundled cross-platform media tools; no system FFmpeg install
 
 ## Requirements
 
 - Python 3.10 or newer
 - an active ChatGPT login in Codex
-- FFmpeg and FFprobe available in `PATH`
 
-Install FFmpeg:
-
-### Windows
-
-```powershell
-winget install --id BtbN.FFmpeg.LGPL -e
-```
-
-Open a new terminal after installation.
-
-### macOS
-
-```bash
-brew install ffmpeg
-```
-
-### Debian or Ubuntu
-
-```bash
-sudo apt-get update
-sudo apt-get install -y ffmpeg
-```
+Python package installation pulls in PyAV and a platform-specific FFmpeg binary automatically.
 
 ## Install
 
 With `pipx`:
 
 ```bash
-pipx install git+https://github.com/grimich/codex-transcribe.git@v0.1.0
+pipx install git+https://github.com/grimich/codex-transcribe.git@v0.2.0
 ```
 
 With `uv`:
 
 ```bash
-uv tool install git+https://github.com/grimich/codex-transcribe.git@v0.1.0
+uv tool install git+https://github.com/grimich/codex-transcribe.git@v0.2.0
 ```
 
 With pip:
 
 ```bash
-python -m pip install git+https://github.com/grimich/codex-transcribe.git@v0.1.0
+python -m pip install git+https://github.com/grimich/codex-transcribe.git@v0.2.0
 ```
 
 ## Usage
@@ -120,7 +99,7 @@ Give an agent this repository URL and the following instruction:
 
 ```text
 Install codex-transcribe from this GitHub repository using pipx, uv tool, or
-python -m pip. Ensure ffmpeg and ffprobe are available in PATH. Then run:
+python -m pip. The Python package installs all media dependencies. Then run:
 
 codex-transcribe -o <audio-name>.transcript.txt <audio-file>
 ```
@@ -147,7 +126,7 @@ Important exit codes:
 | 0 | complete success |
 | 2 | invalid CLI arguments |
 | 3 | invalid or changing input |
-| 4 | FFmpeg or media failure |
+| 4 | media inspection or conversion failure |
 | 5 | Codex authentication failure |
 | 6 | backend failure |
 | 7 | partial or incomplete transcript |

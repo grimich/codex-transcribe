@@ -16,7 +16,7 @@ from .media import (
     materialize_chunks,
     plan_chunks,
     probe,
-    resolve_binary,
+    resolve_ffmpeg,
     target_chunk_seconds,
 )
 from .merge import merge_chunks
@@ -195,17 +195,15 @@ async def transcribe(
     state_root: Path,
     auth_file: Path | None,
     ffmpeg_path: Path | None,
-    ffprobe_path: Path | None,
     progress: Progress,
 ) -> TranscriptionResult:
     state_root.mkdir(parents=True, exist_ok=True)
     source = _prepare_input(input_value, state_root)
-    ffprobe = resolve_binary("ffprobe", ffprobe_path, "CODEX_TRANSCRIBE_FFPROBE")
-    ffmpeg = resolve_binary("ffmpeg", ffmpeg_path, "CODEX_TRANSCRIBE_FFMPEG")
+    ffmpeg = resolve_ffmpeg(ffmpeg_path)
 
     try:
         progress("Inspecting input")
-        media = probe(source.path, ffprobe)
+        media = probe(source.path)
         key = _job_key(source, options)
         state = StateStore(state_root, key)
 

@@ -6,7 +6,7 @@ This repository contains one Python CLI: `codex-transcribe`.
 
 1. Use Python 3.10 or newer.
 2. Install this repository with `pipx install .`, `uv tool install .`, or `python -m pip install .`.
-3. Ensure `ffmpeg` and `ffprobe` are present in `PATH`.
+3. Do not install system FFmpeg or FFprobe; the Python package supplies its media dependencies.
 4. Do not copy, print, or modify `~/.codex/auth.json`.
 
 ## Run

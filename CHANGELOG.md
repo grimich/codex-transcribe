@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 — 2026-10-13
+
+- Install PyAV and a platform-specific FFmpeg binary as Python dependencies.
+- Remove the system FFmpeg and FFprobe requirement.
+- Probe media in-process through PyAV.
+
 ## 0.1.0 — 2026-10-13
 
 - Initial cross-platform Python package.

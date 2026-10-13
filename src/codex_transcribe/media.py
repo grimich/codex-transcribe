@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import json
 import math
 import os
-import shutil
 import subprocess
 from pathlib import Path
+
+import av
+import imageio_ffmpeg
 
 from .errors import TranscribeError
 from .models import Chunk, MediaInfo
@@ -14,26 +15,25 @@ from .models import Chunk, MediaInfo
 SUPPORTED_SUFFIXES = {".m4a", ".mp4", ".mp3", ".wav", ".wave", ".flac", ".ogg", ".oga", ".webm"}
 
 
-def resolve_binary(name: str, explicit: Path | None, env_name: str) -> Path:
+def resolve_ffmpeg(explicit: Path | None) -> Path:
     if explicit is not None:
         candidate = explicit.expanduser().resolve()
         if candidate.is_file():
             return candidate
-        raise TranscribeError("dependency_missing", f"{name} was not found at {candidate}", 4)
-    from_env = os.environ.get(env_name)
+        raise TranscribeError("dependency_missing", f"FFmpeg was not found at {candidate}", 4)
+    from_env = os.environ.get("CODEX_TRANSCRIBE_FFMPEG")
     if from_env:
         candidate = Path(from_env).expanduser().resolve()
         if candidate.is_file():
             return candidate
-        raise TranscribeError("dependency_missing", f"{name} was not found at {candidate}", 4)
-    resolved = shutil.which(name)
-    if not resolved:
-        raise TranscribeError(
-            "dependency_missing",
-            f"{name} is required but was not found in PATH; install FFmpeg or pass --{name}",
-            4,
-        )
-    return Path(resolved).resolve()
+        raise TranscribeError("dependency_missing", f"FFmpeg was not found at {candidate}", 4)
+    try:
+        candidate = Path(imageio_ffmpeg.get_ffmpeg_exe()).resolve()
+    except Exception as exc:
+        raise TranscribeError("dependency_missing", f"bundled FFmpeg is unavailable: {exc}", 4) from exc
+    if not candidate.is_file():
+        raise TranscribeError("dependency_missing", f"bundled FFmpeg was not found at {candidate}", 4)
+    return candidate
 
 
 def _run(command: list[str], label: str, timeout: float = 600.0) -> subprocess.CompletedProcess[str]:
@@ -57,61 +57,45 @@ def _run(command: list[str], label: str, timeout: float = 600.0) -> subprocess.C
     return result
 
 
-def probe(path: Path, ffprobe: Path) -> MediaInfo:
-    result = _run(
-        [
-            str(ffprobe),
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration,size,bit_rate,format_name",
-            "-show_entries",
-            "stream=index,codec_type,codec_name,sample_rate,channels,bit_rate",
-            "-of",
-            "json",
-            str(path),
-        ],
-        "ffprobe",
-        timeout=120.0,
-    )
+def probe(path: Path) -> MediaInfo:
     try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise TranscribeError("media_probe_invalid", "ffprobe returned invalid JSON", 4) from exc
+        size = path.stat().st_size
+        with av.open(str(path), mode="r") as container:
+            audio_stream = next((stream for stream in container.streams if stream.type == "audio"), None)
+            if audio_stream is None:
+                raise TranscribeError("media_no_audio", "input does not contain an audio stream", 4)
 
-    streams = payload.get("streams") if isinstance(payload, dict) else None
-    audio_stream = None
-    if isinstance(streams, list):
-        audio_stream = next(
-            (item for item in streams if isinstance(item, dict) and item.get("codec_type") == "audio"),
-            None,
-        )
-    if not audio_stream:
-        raise TranscribeError("media_no_audio", "input does not contain an audio stream", 4)
+            duration: float | None = None
+            if container.duration is not None:
+                duration = float(container.duration / av.time_base)
+            elif audio_stream.duration is not None and audio_stream.time_base is not None:
+                duration = float(audio_stream.duration * audio_stream.time_base)
 
-    format_info = payload.get("format") if isinstance(payload, dict) else None
-    if not isinstance(format_info, dict):
-        raise TranscribeError("media_probe_invalid", "ffprobe response did not contain format metadata", 4)
+            codec = audio_stream.codec_context
+            format_name = getattr(container.format, "name", None) or "unknown"
+            codec_name = getattr(codec, "name", None) or "unknown"
+            bit_rate_value = container.bit_rate or getattr(audio_stream, "bit_rate", None)
+            sample_rate = getattr(codec, "sample_rate", None) or getattr(audio_stream, "rate", None)
+            layout = getattr(codec, "layout", None)
+            channels = getattr(layout, "nb_channels", None)
+    except TranscribeError:
+        raise
+    except (OSError, av.error.FFmpegError) as exc:
+        raise TranscribeError("media_probe_invalid", f"could not inspect input media: {exc}", 4) from exc
 
-    try:
-        duration = float(format_info["duration"])
-        size = int(format_info.get("size") or path.stat().st_size)
-    except (KeyError, TypeError, ValueError, OSError) as exc:
-        raise TranscribeError("media_probe_invalid", "input duration or size is unavailable", 4) from exc
+    if duration is None:
+        raise TranscribeError("media_probe_invalid", "input duration or size is unavailable", 4)
     if not math.isfinite(duration) or duration <= 0:
         raise TranscribeError("media_probe_invalid", "input duration must be finite and positive", 4)
 
-    bit_rate_value = format_info.get("bit_rate") or audio_stream.get("bit_rate")
     try:
         bit_rate = int(bit_rate_value)
     except (TypeError, ValueError):
         bit_rate = max(1, round(size * 8 / duration))
 
-    sample_rate = audio_stream.get("sample_rate")
-    channels = audio_stream.get("channels")
     return MediaInfo(
-        format_name=str(format_info.get("format_name") or "unknown"),
-        codec_name=str(audio_stream.get("codec_name") or "unknown"),
+        format_name=str(format_name),
+        codec_name=str(codec_name),
         duration_seconds=duration,
         size_bytes=size,
         bit_rate=bit_rate,
